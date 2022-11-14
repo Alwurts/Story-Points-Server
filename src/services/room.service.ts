@@ -31,7 +31,7 @@ const createRoom = (roomTopic: string, moderatorId: string) => {
   return newRoom;
 };
 
-const deleteRoom = (id: number) => {
+const deleteRoom = (id: string) => {
   return delete serverStorage.rooms[id];
 };
 
@@ -39,6 +39,41 @@ const startVoting = (roomId: string) => {
   const roomToVoteOn = serverStorage.rooms[roomId];
   if (!roomToVoteOn) return null;
   roomToVoteOn.state = "voting";
+  roomToVoteOn.activeUsers.forEach((user) => {
+    roomToVoteOn.votingSessionVotes[user.id] = null;
+  });
+  return roomToVoteOn;
+};
+
+const finishVoting = (roomId: string) => {
+  const roomToVoteOn = serverStorage.rooms[roomId];
+  if (!roomToVoteOn) return null;
+
+  const allUsersVoted =
+    -1 ===
+    Object.keys(roomToVoteOn.votingSessionVotes).findIndex((votingUserId) => {
+      const votingUserIsActive =
+        -1 !==
+        roomToVoteOn.activeUsers.findIndex(
+          (activeUser) => activeUser.id === votingUserId
+        );
+      if (votingUserIsActive) {
+        return roomToVoteOn.votingSessionVotes[votingUserId] === null;
+      }
+    });
+
+  if (!allUsersVoted) return;
+
+  roomToVoteOn.state = "results";
+  return roomToVoteOn;
+};
+
+const finishResults = (roomId: string) => {
+  const roomToVoteOn = serverStorage.rooms[roomId];
+  if (!roomToVoteOn) return null;
+
+  roomToVoteOn.state = "waiting";
+  roomToVoteOn.votingSessionVotes = {};
   return roomToVoteOn;
 };
 
@@ -62,6 +97,8 @@ const addUserToRoom = (userId: string, roomId: string) => {
   const room = serverStorage.rooms[roomId];
   if (!room) return null;
 
+  if (room.activeUsers.length >= 10) return null;
+
   const roomHaveBeenActiveUsers = room.hasBeenActiveUser;
   if (!roomHaveBeenActiveUsers[newRoomUser.id]) {
     roomHaveBeenActiveUsers[newRoomUser.id] = newRoomUser;
@@ -75,6 +112,23 @@ const addUserToRoom = (userId: string, roomId: string) => {
   if (!room.moderator) {
     addModeratorToRoom(newRoomUser.id, room.id);
   }
+  return newRoomUser;
+};
+
+const addUserToHasBeenActiveRoom = (userId: string, roomId: string) => {
+  if (!roomId || !userId) return null;
+
+  const newRoomUser = serverStorage.users[userId];
+  if (!newRoomUser) return null;
+
+  const room = serverStorage.rooms[roomId];
+  if (!room) return null;
+
+  const roomHaveBeenActiveUsers = room.hasBeenActiveUser;
+  if (!roomHaveBeenActiveUsers[newRoomUser.id]) {
+    roomHaveBeenActiveUsers[newRoomUser.id] = newRoomUser;
+  }
+
   return newRoomUser;
 };
 
@@ -107,9 +161,6 @@ const deleteUserFromRoom = (userId: string, roomId: string) => {
     return userActive.id === userId;
   });
 
-  console.log("userInRoomPosition");
-  console.log(userInRoomPosition);
-
   if (userInRoomPosition != -1) {
     serverStorage.rooms[roomId].activeUsers = roomActiveUsers.splice(
       userInRoomPosition - 1,
@@ -122,6 +173,7 @@ const deleteUserFromRoom = (userId: string, roomId: string) => {
   if (!roomActiveUsers.length) {
     setRoomToInactive(roomId);
     removeModerator(roomId);
+    deleteRoom(roomId);
   }
   return serverStorage.rooms[roomId];
 };
@@ -138,8 +190,11 @@ export default {
   addModeratorToRoom,
   userIndividualVote,
   validateUserActiveInRoom,
+  addUserToHasBeenActiveRoom,
   getRooms,
   startVoting,
+  finishVoting,
+  finishResults,
   createRoom,
   getRoomById,
   deleteRoom,

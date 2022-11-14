@@ -6,12 +6,12 @@ export interface UserDisplay {
 export interface User extends UserClient {
   sessions: { [key: string]: UserSession };
   active?: boolean;
-  color?: string;
 }
 
 export interface UserClient {
   id: string;
   userName: string;
+  color?: string;
 }
 
 export interface UserSession {

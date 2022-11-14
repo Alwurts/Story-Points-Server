@@ -4,6 +4,7 @@ import { serverStorage } from "./storage.service";
 import sessionService from "./session.service";
 import { UserClient, User, UserSession } from "../types/user";
 import roomService from "./room.service";
+import { randomHexColor } from "../utils/randomColorGenerator";
 // functions to interact with postgres without the response and request, just pass the parameters we need
 
 const getUserById = (id: string) => {
@@ -14,24 +15,28 @@ const getUsers = () => {
   return serverStorage.users;
 };
 
-const createUser = (userName: string) => {
-  let newUserId: string;
-  newUserId = crypto.randomUUID();
-  // Check we dont have that Id already
-  while (!newUserId || serverStorage.users[newUserId]) {
-    newUserId = crypto.randomUUID();
+const createUser = (userName: string, id?: string) => {
+  if (!id) {
+    id = crypto.randomUUID();
+    // Check we dont have that Id already
+    while (!id || serverStorage.users[id]) {
+      id = crypto.randomUUID();
+    }
   }
 
+  const newUserColor = "#" + (((1 << 24) * Math.random()) | 0).toString(16);
+
   const newClientUser: UserClient = {
-    id: newUserId,
+    id: id,
     userName: userName,
+    color: newUserColor,
   };
   const newServerUser: User = {
     ...newClientUser,
     active: false,
     sessions: {},
   };
-  serverStorage.users[newUserId] = newServerUser;
+  serverStorage.users[id] = newServerUser;
   return newClientUser;
 };
 

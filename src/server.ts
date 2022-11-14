@@ -12,11 +12,14 @@ import userService from "./services/user.service";
 import { SocketRoom } from "./types/socket";
 import sessionService from "./services/session.service";
 
+import * as dotenv from "dotenv";
+dotenv.config();
+
 const app = express();
 app.use(express.json()); // Instead of body-parser.json
 const server = http.createServer(app);
 
-console.log(serverStorage);
+const PORT = process.env.PORT || 4000;
 
 const corsOptions = {
   origin: "http://localhost:3000",
@@ -53,24 +56,51 @@ io.on("connection", (socket: SocketRoom) => {
   //roomSocketHandler(io, socket);
 
   socket.on("room:join", (data) => {
-    console.log("JOIN ROOM");
-    console.log(socket.sessionId);
     const { userId, roomId } = data;
 
-    if (!userId || !roomId) return null;
-
-    if (!roomService.getRoomById(roomId)) {
-      return null;
-    }
-
-    const updatedRoom = roomService.addUserToRoom(userId, roomId);
-    if (!updatedRoom) {
-      socket.emit("room:update", null);
+    if (!userId || !roomId) {
+      socket.emit("room:redirect", "/");
       return;
     }
 
-    const newSession = userService.addSessionToUser(userId, roomId);
+    const currentRoom = roomService.getRoomById(roomId);
+    if (!currentRoom) {
+      socket.emit("room:redirect", "/roomerror");
+      return;
+    }
 
+    const currentUser = userService.getUserById(userId);
+    if (!currentUser) {
+      socket.emit("room:redirect", `/joinroom/${currentRoom.id}`);
+      return;
+    }
+
+    const userIsActiveInRoom = roomService.validateUserActiveInRoom(
+      userId,
+      currentRoom.id
+    );
+
+    switch (currentRoom.state) {
+      case "inactive":
+        socket.emit("room:redirect", "/roomerror");
+        return;
+      case "waiting":
+        break;
+      case "voting":
+        /* if (currentRoom.votingSessionVotes[userId] === undefined) {
+          socket.emit("room:redirect", `/joinroom/${currentRoom.id}`);
+          return;
+        } */
+        break;
+      default:
+        console.log("DEFAULT");
+        break;
+    }
+
+    const userAddedToRoom = roomService.addUserToRoom(userId, roomId);
+    if (!userAddedToRoom) return;
+
+    const newSession = userService.addSessionToUser(userId, roomId);
     if (newSession) {
       socket.userId = newSession.userId;
       socket.sessionId = newSession.id;
@@ -79,16 +109,63 @@ io.on("connection", (socket: SocketRoom) => {
         .in(newSession.roomId)
         .emit("room:update", serverStorage.rooms[roomId]);
     } else {
-      socket.emit("room:update", null);
+      socket.emit("room:redirect", "/roomerror");
     }
   });
 
-  socket.on("disconnect", (sdata) => {
-    console.log(`🔥: user disconnected`);
+  socket.on("room:startvoting", (data) => {
+    const { roomId } = data;
+    const currentRoom = roomService.getRoomById(roomId);
+    if (currentRoom && currentRoom.state === "waiting") {
+      const updatedRoom = roomService.startVoting(roomId);
+      io.sockets.in(roomId).emit("room:update", serverStorage.rooms[roomId]);
+    } else {
+      return;
+    }
+  });
 
+  socket.on("room:finishvoting", (data) => {
+    const { roomId } = data;
+    const currentRoom = roomService.getRoomById(roomId);
+
+    if (currentRoom && currentRoom.state === "voting") {
+      const updatedRoom = roomService.finishVoting(roomId);
+      if (!updatedRoom) return;
+      io.sockets.in(roomId).emit("room:update", serverStorage.rooms[roomId]);
+    } else {
+      return;
+    }
+  });
+
+  socket.on("room:finishresults", (data) => {
+    const { roomId } = data;
+    const currentRoom = roomService.getRoomById(roomId);
+
+    if (currentRoom && currentRoom.state === "results") {
+      const updatedRoom = roomService.finishResults(roomId);
+      if (!updatedRoom) return;
+      io.sockets.in(roomId).emit("room:update", serverStorage.rooms[roomId]);
+    } else {
+      return;
+    }
+  });
+
+  socket.on("room:vote", (data) => {
+    const { userId, roomId, vote } = data;
+    const currentRoom = roomService.getRoomById(roomId);
+    if (currentRoom && currentRoom.state === "voting") {
+      const updatedRoom = roomService.userIndividualVote(roomId, userId, vote);
+      io.sockets.in(roomId).emit("room:update", serverStorage.rooms[roomId]);
+    } else {
+      return;
+    }
+  });
+
+  socket.on("disconnect", (data) => {
     const { userId, sessionId } = socket;
 
     if (userId && sessionId) {
+      console.log(`🔥: user disconnected`);
       const session = sessionService.getSessionById(sessionId);
       userService.deleteSessionFromUser(userId, sessionId);
       io.sockets
@@ -98,6 +175,6 @@ io.on("connection", (socket: SocketRoom) => {
   });
 });
 
-server.listen(4000, () => {
-  console.log("listening on *:4000");
+server.listen(PORT, () => {
+  console.log(`listening on *:${PORT}`);
 });

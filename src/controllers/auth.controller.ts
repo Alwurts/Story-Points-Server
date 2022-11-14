@@ -26,7 +26,7 @@ const signin = (request: Request, response: Response, next: NextFunction) => {
     }
     const updatedUser = userService.updateUserName(userName, id);
     if (!updatedUser) {
-      const newUser = userService.createUser(userName);
+      const newUser = userService.createUser(userName, id);
       response.json(newUser);
     } else {
       response.json(updatedUser);
