@@ -5,7 +5,9 @@
   "author": "Alwurts",
   "license": "MIT",
   "scripts": {
-    "start": "nodemon"
+    "build": "tsc",
+    "start": "node ./dist/src/server.ts",
+    "start dev": "nodemon"
   },
   "dependencies": {
     "cors": "^2.8.5",
