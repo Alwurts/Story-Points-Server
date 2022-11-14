@@ -21,8 +21,11 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 4000;
 
+const CLIENT_URL =
+  process.env.CLIENT_URL || "https://www.storymator.alwurts.com";
+
 const corsOptions = {
-  origin: "http://localhost:3000",
+  origin: CLIENT_URL,
 };
 app.use(cors(corsOptions));
 
@@ -47,7 +50,7 @@ app.use(
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: CLIENT_URL,
   },
 });
 
