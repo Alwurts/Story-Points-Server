@@ -49,7 +49,7 @@ const finishVoting = (roomId: string) => {
   const roomToVoteOn = serverStorage.rooms[roomId];
   if (!roomToVoteOn) return null;
 
-  const allUsersVoted =
+  const allActiveUsersVoted =
     -1 ===
     Object.keys(roomToVoteOn.votingSessionVotes).findIndex((votingUserId) => {
       const votingUserIsActive =
@@ -62,7 +62,7 @@ const finishVoting = (roomId: string) => {
       }
     });
 
-  if (!allUsersVoted) return;
+  if (!allActiveUsersVoted) return;
 
   roomToVoteOn.state = "results";
   return roomToVoteOn;
@@ -170,10 +170,11 @@ const deleteUserFromRoom = (userId: string, roomId: string) => {
   if (userInRoomPosition === 0 && roomActiveUsers.length) {
     addModeratorToRoom(roomActiveUsers[0].id, roomId);
   }
-  if (!roomActiveUsers.length) {
-    setRoomToInactive(roomId);
-    removeModerator(roomId);
+  if (roomActiveUsers.length === 0) {
+    /* setRoomToInactive(roomId);
+    removeModerator(roomId); */
     deleteRoom(roomId);
+    return true;
   }
   return serverStorage.rooms[roomId];
 };
