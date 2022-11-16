@@ -68,7 +68,12 @@ io.on("connection", (socket: SocketRoom) => {
 
     const currentRoom = roomService.getRoomById(roomId);
     if (!currentRoom) {
-      socket.emit("room:redirect", "/roomerror");
+      socket.emit("room:redirect", `/roomerror?errorMessage=doesn't exist`);
+      return;
+    }
+
+    if (currentRoom.activeUsers.length > 10) {
+      socket.emit("room:redirect", `/roomerror?errorMessage=is full`);
       return;
     }
 
@@ -83,22 +88,8 @@ io.on("connection", (socket: SocketRoom) => {
       currentRoom.id
     );
 
-    switch (currentRoom.state) {
-      case "inactive":
-        socket.emit("room:redirect", "/roomerror");
-        return;
-      case "waiting":
-        break;
-      case "voting":
-        /* if (currentRoom.votingSessionVotes[userId] === undefined) {
-          socket.emit("room:redirect", `/joinroom/${currentRoom.id}`);
-          return;
-        } */
-        break;
-      default:
-        console.log("DEFAULT");
-        break;
-    }
+    if (currentRoom.state === "inactive")
+      socket.emit("room:redirect", "/roomerror");
 
     const userAddedToRoom = roomService.addUserToRoom(userId, roomId);
     if (!userAddedToRoom) return;
@@ -107,6 +98,7 @@ io.on("connection", (socket: SocketRoom) => {
     if (newSession) {
       socket.userId = newSession.userId;
       socket.sessionId = newSession.id;
+      socket.roomId = newSession.roomId;
       socket.join(newSession.roomId);
       io.sockets
         .in(newSession.roomId)
@@ -116,8 +108,8 @@ io.on("connection", (socket: SocketRoom) => {
     }
   });
 
-  socket.on("room:startvoting", (data) => {
-    const { roomId } = data;
+  socket.on("room:startvoting", () => {
+    const roomId = socket.roomId as string;
     const currentRoom = roomService.getRoomById(roomId);
     if (currentRoom && currentRoom.state === "waiting") {
       const updatedRoom = roomService.startVoting(roomId);
@@ -127,8 +119,8 @@ io.on("connection", (socket: SocketRoom) => {
     }
   });
 
-  socket.on("room:finishvoting", (data) => {
-    const { roomId } = data;
+  socket.on("room:finishvoting", () => {
+    const roomId = socket.roomId as string;
     const currentRoom = roomService.getRoomById(roomId);
 
     if (currentRoom && currentRoom.state === "voting") {
@@ -140,8 +132,8 @@ io.on("connection", (socket: SocketRoom) => {
     }
   });
 
-  socket.on("room:finishresults", (data) => {
-    const { roomId } = data;
+  socket.on("room:finishresults", () => {
+    const roomId = socket.roomId as string;
     const currentRoom = roomService.getRoomById(roomId);
 
     if (currentRoom && currentRoom.state === "results") {
@@ -154,7 +146,9 @@ io.on("connection", (socket: SocketRoom) => {
   });
 
   socket.on("room:vote", (data) => {
-    const { userId, roomId, vote } = data;
+    const { vote } = data;
+    const roomId = socket.roomId as string;
+    const userId = socket.userId as string;
     const currentRoom = roomService.getRoomById(roomId);
     if (currentRoom && currentRoom.state === "voting") {
       const updatedRoom = roomService.userIndividualVote(roomId, userId, vote);
@@ -164,8 +158,31 @@ io.on("connection", (socket: SocketRoom) => {
     }
   });
 
-  socket.on("disconnect", (data) => {
-    const { userId, sessionId } = socket;
+  socket.on("room:close", () => {
+    const roomId = socket.roomId as string;
+    const currentRoom = roomService.getRoomById(roomId);
+    if (currentRoom) {
+      roomService.deleteRoom(roomId);
+      io.sockets
+        .in(roomId)
+        .emit("room:redirect", `/roomerror?errorMessage=was closed`);
+    }
+  });
+
+  socket.on("room:exit", () => {
+    const roomId = socket.roomId as string;
+    const userId = socket.userId as string;
+    const exitedRoom = roomService.deleteUserFromRoom(userId, roomId);
+    if (exitedRoom) {
+      //roomService.deleteRoom(roomId);
+      socket.emit("room:redirect", `/roomerror?errorMessage=was exited`);
+      io.sockets.in(roomId).emit("room:update", serverStorage.rooms[roomId]);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    const sessionId = socket.sessionId as string;
+    const userId = socket.userId as string;
 
     if (userId && sessionId) {
       console.log(`🔥: user disconnected`);
